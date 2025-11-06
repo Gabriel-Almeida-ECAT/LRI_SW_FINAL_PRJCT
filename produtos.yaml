@@ -1,0 +1,6 @@
+path: ./datasets/old_produtos
+train: train/images
+val: valid/images
+names:
+- Good
+- No Good
