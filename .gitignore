@@ -4,4 +4,5 @@ datasets/
 models/
 runs/
 src/
-cifar10_mobilenetv2/
+ignore/
+*.bkp

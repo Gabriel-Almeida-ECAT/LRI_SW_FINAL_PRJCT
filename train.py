@@ -1,54 +1,134 @@
 import os
 import torch
 import cv2
-import time
 import yaml
+import numpy as np
+import shutil
 
-from ultralytics import YOLO
 from pathlib import Path
+from ultralytics import YOLO
+from sklearn.model_selection import train_test_split
 
-def createDsFolder():
-    dataset_root = Path("../datasets/old_produtos")
-    if not (dataset_root.exists() and dataset_root.is_dir()):
-        for split in ["train", "valid"]:
-            (dataset_root / f"{split}/images").mkdir(parents=True, exist_ok=True)
-            (dataset_root / f"{split}/labels").mkdir(parents=True, exist_ok=True)
-        print("Estrutura YOLO criada em:", dataset_root.resolve())
 
-def getImgsFromVideo(video_path, label):
-    split = "train"  # "valid" para validação
-    img_dir = pathlib.Path(f"datasets/old_produtos/{split}/images")
-    img_dir.mkdir(parents=True, exist_ok=True)
+IMG_SIZE_X = 720
+IMG_SIZE_Y = 480
 
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        raise RuntimeError("Não foi possível abrir a webcam.")
+def copy_images_to_split(image_list, src_dir,  target_dir):
+    for img_name in image_list:
+        src = src_dir / img_name
+        dst = target_dir / img_name
+        shutil.copy2(src, dst)
 
-    while True:
-        ok, f = cap.read()
-        if not ok: break
-        cv2.putText(f, "Tecle s para salvar frame; q sai", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        cv2.imshow("coleta", f)
-        k = cv2.waitKey(1) & 0xFF
-        if k == ord('q'): break
-        if k == ord('s'):
-            p = img_dir / f"{int(time.time() * 1000)}.jpg"
-            cv2.imwrite(str(p), f)
-            print("Salvo:", p)
 
-    cap.release()
-    cv2.destroyAllWindows()
+def getDatasetFromVideos(videos_list, labels_list, num_photos, tra_val_tes_split=[0.7, 0.15, 0.15]):
+    assert len(videos_list) != 0, "Nenhum vídeo fornecido"
+    assert len(videos_list) == len(labels_list), "Deve haver um label por vídeo"
+    assert abs(sum(tra_val_tes_split) - 1.0) < 1e-6, "As proporções devem somar 1.0"
 
-def createDsYaml():
+    base_dir = Path("datasets/final_dataset")
+    dir_all_photos = base_dir / "all_photos"
+    dir_all_photos.mkdir(parents=True, exist_ok=True)
+
+    dir_train_images = base_dir / "train" / "images"
+    dir_train_labels = base_dir / "train" / "labels"
+    dir_val_images = base_dir / "val" / "images"
+    dir_val_labels = base_dir / "val" / "labels"
+    dir_test_images = base_dir / "test" / "images"
+    dir_test_labels = base_dir / "test" / "labels"
+
+    for directory in [dir_train_images, dir_train_labels, dir_val_images,
+                      dir_val_labels, dir_test_images, dir_test_labels]:
+        directory.mkdir(parents=True, exist_ok=True)
+
+    image_label_map = {}
+
+    for video_path, label in zip(videos_list, labels_list):
+        video_src = cv2.VideoCapture(video_path)
+        if not video_src.isOpened():
+            raise RuntimeError(f"Não foi possível abrir o vídeo: {video_path}")
+
+        total_frames = int(video_src.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        if num_photos > total_frames:
+            print(f"AVISO: {num_photos} fotos solicitadas, mas apenas {total_frames} frames disponíveis em {video_path}")
+            actual_num_photos = total_frames
+        else:
+            actual_num_photos = num_photos
+
+        photos_ind = np.linspace(0, total_frames+1, actual_num_photos, dtype=int)
+
+        img_ind = 0
+        frame_ind = 0
+
+        while img_ind < len(photos_ind):
+            if frame_ind == photos_ind[img_ind]:
+                has_frame, crtFrame = video_src.read()
+
+                if not has_frame:
+                    break
+
+                img_name = f"{Path(video_path).stem}_frame{frame_ind:06d}.jpg"
+                img_path = dir_all_photos / img_name
+
+                resized_img = cv2.resize(crtFrame, (IMG_SIZE_X, IMG_SIZE_Y))
+                cv2.imwrite(str(img_path), resized_img)
+
+                image_label_map[img_name] = label
+
+                img_ind += 1
+            else:
+                has_frame = video_src.grab()
+
+                if not has_frame:
+                    break
+
+            frame_ind += 1
+
+        video_src.release()
+        print(f"Extraídas {img_ind} imagens de {Path(video_path).name} (label: {label})")
+
+        # Separação estratificada em train/val/test
+    all_images = list(image_label_map.keys())
+    all_labels = [image_label_map[img] for img in all_images]
+
+    if len(all_images) == 0:
+        raise RuntimeError("Nenhuma imagem foi extraída dos vídeos")
+
+    # Primeira divisão: train vs (val + test)
+    train_images, temp_images, train_labels, temp_labels = train_test_split(
+        all_images,
+        all_labels,
+        test_size=(tra_val_tes_split[1] + tra_val_tes_split[2]),
+        stratify=all_labels,
+        random_state=42
+    )
+
+    # Segunda divisão: val vs test
+    val_size_ratio = tra_val_tes_split[1] / (tra_val_tes_split[1] + tra_val_tes_split[2])
+    val_images, test_images, val_labels, test_labels = train_test_split(
+        temp_images,
+        temp_labels,
+        test_size=(1 - val_size_ratio),
+        stratify=temp_labels,
+        random_state=42
+    )
+
+    copy_images_to_split(train_images, dir_all_photos, dir_train_images)
+    copy_images_to_split(val_images, dir_all_photos, dir_val_images)
+    copy_images_to_split(test_images, dir_all_photos, dir_test_images)
+
     yaml_dict = {
-        "path": "./datasets/old_produtos",
+        "path": ".\\" + str(base_dir),
         "train": "train/images",
         "val": "valid/images",
-        "names": ["philips", "sextavado", "pitao"]
+        "names": ["radiador", "deifeito"]
     }
-    with open("../old_produtos.yaml", "w") as f:
+    yaml_name = base_dir / "train_info.yaml"
+    with open(str(yaml_name), "w") as f:
         yaml.safe_dump(yaml_dict, f, sort_keys=False)
-    print("Gerado old_produtos.yaml")
+
+    return None
+
 
 def train():
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -58,7 +138,7 @@ def train():
     model = YOLO("yolov8n.pt")  # já é o menor
 
     results = model.train(
-        data="old_produtos.yaml",
+        data="train_info.yaml",
         imgsz=512,  # ↓ de 640 para 512 (ou 448)
         batch=8,  # ↓ de 16 para 8 (tente 4 se ainda der OOM)
         workers=0,  # notebook: evita múltiplos loaders
@@ -78,5 +158,13 @@ def getBestModle():
     print("Usando:", best)
     model = YOLO(str(best))
 
-if __name__ == '--main__':
-    train()
+if __name__ == '__main__':
+    video_1 = r'datasets/VIDEO.mp4'
+    video_2 = r'datasets/VIDEO2.mp4'
+
+    getDatasetFromVideos(
+        [video_1, video_2],
+        ['SERP', 'DEFEITO'],
+        num_photos=100,
+        tra_val_tes_split=[0.7, 0.15, 0.15]
+    )
