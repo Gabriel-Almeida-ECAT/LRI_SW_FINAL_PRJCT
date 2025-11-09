@@ -130,28 +130,93 @@ def getDatasetFromVideos(videos_list, labels_list, num_photos, tra_val_tes_split
     return None
 
 
-def train():
+def train(dataset_path):
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     torch.cuda.empty_cache()
-    torch.set_float32_matmul_precision("medium")  # PyTorch 2.x
+    torch.set_float32_matmul_precision("medium")
 
-    model = YOLO("yolov8n.pt")  # já é o menor
-
+    dataset_path = Path(dataset_path)
+    yaml_path = dataset_path / "train_info.yaml"
+    
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Arquivo de configuração não encontrado: {yaml_path}")
+    
+    # Verificar diretórios necessários
+    required_dirs = [
+        dataset_path / "train" / "images",
+        dataset_path / "train" / "labels",
+        dataset_path / "val" / "images",
+        dataset_path / "val" / "labels"
+    ]
+    
+    for dir_path in required_dirs:
+        if not dir_path.exists():
+            raise FileNotFoundError(f"Diretório necessário não encontrado: {dir_path}")
+        
+        files = list(dir_path.glob("*"))
+        if len(files) == 0:
+            print(f"<AVISO> Diretório vazio: {dir_path}")
+    
+    train_images = list((dataset_path / "train" / "images").glob("*.jpg"))
+    train_labels = list((dataset_path / "train" / "labels").glob("*.txt"))
+    val_images = list((dataset_path / "val" / "images").glob("*.jpg"))
+    val_labels = list((dataset_path / "val" / "labels").glob("*.txt"))
+    
+    print("\n" + "="*60)
+    print("# VERIFICAÇÃO DO DATASET")
+    print(f"Treino  - Imagens: {len(train_images)} | Labels: {len(train_labels)}")
+    print(f"Validação - Imagens: {len(val_images)} | Labels: {len(val_labels)}")
+    
+    if len(train_labels) == 0 or len(val_labels) == 0:
+        print("\n<AVISO> Não há arquivos de anotação (.txt) nos diretórios 'labels'!")
+        return None
+    
+    model = YOLO("yolo11x.pt")
+    
+    # Configurações de treinamento otimizadas
+    print("\nIniciando treinamento \n")
     results = model.train(
-        data="train_info.yaml",
-        imgsz=512,  # ↓ de 640 para 512 (ou 448)
-        batch=8,  # ↓ de 16 para 8 (tente 4 se ainda der OOM)
-        workers=0,  # notebook: evita múltiplos loaders
+        data=str(yaml_path),
+        imgsz=512,              # Reduzido para economizar VRAM
+        batch=16,               # Ajuste conforme sua GPU (4 se OOM)
+        workers=0,              # Evita problemas em notebooks
         device=0 if torch.cuda.is_available() else "cpu",
-        epochs=30,
-        cache=False,  # True usa RAM; não afeta VRAM
-        amp=True,  # mixed precision (padrão True)
-        rect=True,  # batches retangulares economizam memória
-        optimizer="SGD",  # opcional; memória similar ao AdamW
-        close_mosaic=5,  # estável no fim; não muda VRAM do forward
-        patience=0  # sem early stop automático
+        epochs=50,
+        cache=False,            # False para economizar RAM
+        amp=True,               # Mixed precision training
+        rect=True,              # Batches retangulares (economiza memória)
+        optimizer="SGD",        # SGD ou AdamW
+        close_mosaic=5,         # Desativa mosaic nos últimos 5 epochs
+        patience=10,            # Early stopping após 10 epochs sem melhora
+        save=True,              # Salvar checkpoints
+        save_period=5,          # Salvar a cada 5 epochs
+        project="runs/train",   # Diretório de saída
+        name="yolo_custom",     # Nome do experimento
+        exist_ok=True,          # Sobrescrever experimentos anteriores
+        pretrained=True,        # Usar pesos pré-treinados
+        verbose=True,           # Logs detalhados
+        hsv_h=0.015,           # Variação de matiz
+        hsv_s=0.7,             # Variação de saturação
+        hsv_v=0.4,             # Variação de valor
+        degrees=0.0,           # Rotação (0 se objetos têm orientação fixa)
+        translate=0.1,         # Translação
+        scale=0.5,             # Escala
+        shear=0.0,             # Cisalhamento
+        perspective=0.0,       # Perspectiva
+        flipud=0.0,            # Flip vertical
+        fliplr=0.5,            # Flip horizontal (50% de chance)
+        mosaic=1.0,            # Mosaic augmentation
+        mixup=0.0,             # Mixup augmentation
     )
-    print("Treino em:", results.save_dir)
+    
+    print("\n" + "="*60)
+    print("# TREINAMENTO CONCLUÍDO")
+    print(f"Resultados salvos em: {results.save_dir}")
+    print(f"Melhor modelo: {results.save_dir}/weights/best.pt")
+    print(f"Último modelo: {results.save_dir}/weights/last.pt")
+    print("="*60)
+    
+    return results
 
 def getBestModle():
     best = list((Path("../runs/detect")).glob("train*/weights/best.pt"))[-1]
@@ -159,12 +224,15 @@ def getBestModle():
     model = YOLO(str(best))
 
 if __name__ == '__main__':
-    video_1 = r'datasets/VIDEO.mp4'
-    video_2 = r'datasets/VIDEO2.mp4'
+    if False:
+        video_1 = r'datasets/VIDEO.mp4'
+        video_2 = r'datasets/VIDEO2.mp4'
 
-    getDatasetFromVideos(
-        [video_1, video_2],
-        ['SERP', 'DEFEITO'],
-        num_photos=100,
-        tra_val_tes_split=[0.7, 0.15, 0.15]
-    )
+        getDatasetFromVideos(
+            [video_1, video_2],
+            ['SERP', 'DEFEITO'],
+            num_photos=100,
+            tra_val_tes_split=[0.7, 0.15, 0.15]
+        )
+
+    train("datasets/final_dataset")

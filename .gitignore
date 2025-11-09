@@ -6,3 +6,4 @@ runs/
 src/
 ignore/
 *.bkp
+*.pt
