@@ -4,6 +4,7 @@ import cv2
 import yaml
 import numpy as np
 import shutil
+import sys
 
 from pathlib import Path
 from ultralytics import YOLO
@@ -18,7 +19,6 @@ def copy_images_to_split(image_list, src_dir,  target_dir):
         src = src_dir / img_name
         dst = target_dir / img_name
         shutil.copy2(src, dst)
-
 
 def getDatasetFromVideos(videos_list, labels_list, num_photos, tra_val_tes_split=[0.7, 0.15, 0.15]):
     assert len(videos_list) != 0, "Nenhum vídeo fornecido"
@@ -218,10 +218,24 @@ def train(dataset_path):
     
     return results
 
-def getBestModle():
-    best = list((Path("../runs/detect")).glob("train*/weights/best.pt"))[-1]
-    print("Usando:", best)
-    model = YOLO(str(best))
+
+def test_pytorch_gpu():
+    print("=== PyTorch GPU Information ===")
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"GPU count: {torch.cuda.device_count()}")
+
+        for i in range(torch.cuda.device_count()):
+            print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+            print(f"GPU {i} capabilities: {torch.cuda.get_device_capability(i)}")
+            print(f"GPU {i} total memory: {torch.cuda.get_device_properties(i).total_memory / 1024 ** 3:.1f} GB")
+    else:
+        print("No CUDA-compatible GPU found")
+
+    return torch.cuda.is_available()
 
 if __name__ == '__main__':
     if False:
@@ -235,4 +249,7 @@ if __name__ == '__main__':
             tra_val_tes_split=[0.7, 0.15, 0.15]
         )
 
-    train("datasets/final_dataset")
+        train("datasets/final_dataset")
+
+    test_pytorch_gpu()
+

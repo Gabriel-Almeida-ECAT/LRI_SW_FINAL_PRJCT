@@ -1,0 +1,22 @@
+# install pytorch with cuda:
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+
+======================================================================================
+# Treino 11-10-2025
+
+20 epochs completed in 1.797 hours.
+Optimizer stripped from C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\last.pt, 114.4MB
+Optimizer stripped from C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\best.pt, 114.4MB
+
+Validating C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\best.pt...
+Ultralytics 8.3.225  Python-3.12.5 torch-2.9.0+cpu CPU (11th Gen Intel Core i7-11800H @ 2.30GHz)
+YOLO11x summary (fused): 190 layers, 56,829,334 parameters, 0 gradients, 194.4 GFLOPs
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100% ━━━━━━━━━━━━ 1/1 0.1it/s 10.5s
+                   all         29         39      0.955      0.979      0.992      0.743
+       {0: 'RADIADOR'}         24         24      0.977      0.958      0.989      0.865
+            {1: 'ERR'}         15         15      0.933          1      0.995      0.621
+Speed: 0.7ms preprocess, 355.2ms inference, 0.0ms loss, 0.3ms postprocess per image
+Results saved to C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom
+
+
+======================================================================================
