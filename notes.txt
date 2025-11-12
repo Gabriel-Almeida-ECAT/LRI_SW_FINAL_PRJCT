@@ -1,5 +1,5 @@
 # install pytorch with cuda:
-pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 
 ======================================================================================
 # Treino 11-10-2025

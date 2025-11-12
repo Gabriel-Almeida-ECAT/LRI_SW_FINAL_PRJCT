@@ -131,7 +131,7 @@ def getDatasetFromVideos(videos_list, labels_list, num_photos, tra_val_tes_split
 
 
 def train(dataset_path):
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
     torch.cuda.empty_cache()
     torch.set_float32_matmul_precision("medium")
 
@@ -171,23 +171,23 @@ def train(dataset_path):
         print("\n<AVISO> Não há arquivos de anotação (.txt) nos diretórios 'labels'!")
         return None
     
-    model = YOLO("yolo11x.pt")
+    model = YOLO("yolo11l.pt")
     
     # Configurações de treinamento otimizadas
     print("\nIniciando treinamento \n")
     results = model.train(
         data=str(yaml_path),
         imgsz=512,              # Reduzido para economizar VRAM
-        batch=16,               # Ajuste conforme sua GPU (4 se OOM)
+        batch=8,               # Ajuste conforme sua GPU (4 se OOM)
         workers=0,              # Evita problemas em notebooks
-        device=0 if torch.cuda.is_available() else "cpu",
-        epochs=50,
+        device= 0 if torch.cuda.is_available() else "cpu",
+        epochs=25,
         cache=False,            # False para economizar RAM
         amp=True,               # Mixed precision training
         rect=True,              # Batches retangulares (economiza memória)
         optimizer="SGD",        # SGD ou AdamW
         close_mosaic=5,         # Desativa mosaic nos últimos 5 epochs
-        patience=10,            # Early stopping após 10 epochs sem melhora
+        patience=5,            # Early stopping após 10 epochs sem melhora
         save=True,              # Salvar checkpoints
         save_period=5,          # Salvar a cada 5 epochs
         project="runs/train",   # Diretório de saída
@@ -201,11 +201,11 @@ def train(dataset_path):
         degrees=0.0,           # Rotação (0 se objetos têm orientação fixa)
         translate=0.1,         # Translação
         scale=0.5,             # Escala
-        shear=0.0,             # Cisalhamento
-        perspective=0.0,       # Perspectiva
-        flipud=0.0,            # Flip vertical
+        shear=0.4,             # Cisalhamento
+        perspective=0.3,       # Perspectiva
+        flipud=0.5,            # Flip vertical
         fliplr=0.5,            # Flip horizontal (50% de chance)
-        mosaic=1.0,            # Mosaic augmentation
+        mosaic=0.0,            # Mosaic augmentation
         mixup=0.0,             # Mixup augmentation
     )
     
@@ -237,6 +237,73 @@ def test_pytorch_gpu():
 
     return torch.cuda.is_available()
 
+
+
+class yoloDefectDetectorClass():
+    def __init__(self):
+        self.model_path = Path("./runs/train/yolo_custom/weights/best.pt")
+        self.model = YOLO(str(self.model_path))
+        self.IMG_SIZE_X = 720
+        self.IMG_SIZE_Y = 480
+
+    def testModel(self, camera_id=0):
+        cap = cv2.VideoCapture(camera_id)
+
+        if not cap.isOpened():
+            print(f"Error: Cannot open camera {camera_id}")
+            return
+
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        if fps == 0:
+            fps = 30
+
+        frame_interval = 1 * fps
+        frame_ind = 0
+        cached_boxes = []  # Armazena as boxes da última detecção
+
+        while True:
+            ret, frame = cap.read()
+
+            if not ret:
+                print("Error: Cannot read frame")
+                break
+
+            resized_frame = cv2.resize(frame, (self.IMG_SIZE_X, self.IMG_SIZE_Y))
+
+            # Executar predição apenas no intervalo especificado
+            if frame_ind % frame_interval == 0:
+                results = self.model(resized_frame)
+
+                # Atualizar cache com as novas detecções
+                cached_boxes = []
+                for box in results[0].boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    conf = float(box.conf[0])
+                    cls = int(box.cls[0])
+                    label = f"{results[0].names[cls]} {conf:.2f}"
+                    cached_boxes.append((x1, y1, x2, y2, label))
+
+            # Sempre desenhar as boxes cacheadas no frame atual
+            display_frame = resized_frame.copy()
+            for x1, y1, x2, y2, label in cached_boxes:
+                cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(display_frame, label, (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            cv2.imshow('YOLO Detection', display_frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+            frame_ind += 1
+
+        cap.release()
+        cv2.destroyAllWindows()
+
+    def detectErrInFrame(self, frame):
+        return self.model(frame)
+
+
 if __name__ == '__main__':
     if False:
         video_1 = r'datasets/VIDEO.mp4'
@@ -249,7 +316,12 @@ if __name__ == '__main__':
             tra_val_tes_split=[0.7, 0.15, 0.15]
         )
 
-        train("datasets/final_dataset")
+    #train("datasets/final_dataset")
 
-    test_pytorch_gpu()
+    #test_pytorch_gpu()
+
+    yoloDetector = yoloDefectDetectorClass()
+    yoloDetector.testModel(camera_id=0)
+
+
 
