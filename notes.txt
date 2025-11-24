@@ -20,3 +20,31 @@ Results saved to C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom
 
 
 ======================================================================================
+]
+# Treino 12-11-2025
+
+EarlyStopping: Training stopped early as no improvement observed in last 5 epochs. Best results observed at epoch 8, best model saved as best.pt.
+To update EarlyStopping(patience=5) pass a new patience value, i.e. `patience=300` or use `patience=0` to disable EarlyStopping.
+
+13 epochs completed in 0.268 hours.
+Optimizer stripped from C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\last.pt, 114.4MB
+Optimizer stripped from C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\best.pt, 114.4MB
+
+Validating C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom\weights\best.pt...
+Ultralytics 8.3.227  Python-3.11.9 torch-2.9.1+cu130 CUDA:0 (NVIDIA GeForce RTX 3060 Laptop GPU, 6144MiB)
+YOLO11x summary (fused): 190 layers, 56,829,334 parameters, 0 gradients, 194.4 GFLOPs
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100% ━━━━━━━━━━━━ 1/1 1.2it/s 0.9s
+                   all         29         39       0.88          1      0.992      0.751
+       {0: 'RADIADOR'}         24         24      0.767          1      0.988      0.891
+            {1: 'ERR'}         15         15      0.994          1      0.995      0.612
+Speed: 0.1ms preprocess, 22.1ms inference, 0.0ms loss, 1.3ms postprocess per image
+Results saved to C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom
+
+============================================================
+# TREINAMENTO CONCLUÍDO
+Resultados salvos em: C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom
+Melhor modelo: C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom/weights/best.pt
+Último modelo: C:\Users\Usuario\Documents\SW_VISAO\runs\train\yolo_custom/weights/last.pt
+============================================================
+
+Process finished with exit code 0

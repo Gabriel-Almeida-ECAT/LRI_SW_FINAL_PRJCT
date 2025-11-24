@@ -171,17 +171,17 @@ def train(dataset_path):
         print("\n<AVISO> Não há arquivos de anotação (.txt) nos diretórios 'labels'!")
         return None
     
-    model = YOLO("yolo11l.pt")
+    model = YOLO("yolo11x.pt")
     
     # Configurações de treinamento otimizadas
     print("\nIniciando treinamento \n")
     results = model.train(
         data=str(yaml_path),
         imgsz=512,              # Reduzido para economizar VRAM
-        batch=8,               # Ajuste conforme sua GPU (4 se OOM)
+        batch=16,               # Ajuste conforme sua GPU (4 se OOM)
         workers=0,              # Evita problemas em notebooks
         device= 0 if torch.cuda.is_available() else "cpu",
-        epochs=25,
+        epochs=30,
         cache=False,            # False para economizar RAM
         amp=True,               # Mixed precision training
         rect=True,              # Batches retangulares (economiza memória)
@@ -200,9 +200,9 @@ def train(dataset_path):
         hsv_v=0.4,             # Variação de valor
         degrees=0.0,           # Rotação (0 se objetos têm orientação fixa)
         translate=0.1,         # Translação
-        scale=0.5,             # Escala
+        scale=0.0,             # Escala
         shear=0.4,             # Cisalhamento
-        perspective=0.3,       # Perspectiva
+        perspective=0.0,       # Perspectiva
         flipud=0.5,            # Flip vertical
         fliplr=0.5,            # Flip horizontal (50% de chance)
         mosaic=0.0,            # Mosaic augmentation
@@ -321,7 +321,7 @@ if __name__ == '__main__':
     #test_pytorch_gpu()
 
     yoloDetector = yoloDefectDetectorClass()
-    yoloDetector.testModel(camera_id=0)
+    yoloDetector.testModel(camera_id=1)
 
 
 

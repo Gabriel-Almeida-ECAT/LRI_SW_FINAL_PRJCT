@@ -39,7 +39,7 @@ class logHandlerClass():
 
     def log(self, message):
         self.crt_log_file = self.getCrtLogFile()
-        log_msg = f"{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')} {message}\n"
+        log_msg = f"{datetime.now().strftime('%Y-%m-%d_%Hh:%Mm:%Ss')} {message}\n"
         print(log_msg)
 
         with open(self.crt_log_file, 'a') as file:

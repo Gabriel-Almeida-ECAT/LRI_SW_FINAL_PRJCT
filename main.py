@@ -56,7 +56,7 @@ class RADIATOR_CHECK_SM:
                 # Espera sinal do sensor de presença
                 # Quando detectar, desliga esteira e vai para análise
 
-                if True: #sensor serpentina
+                if False: #sensor serpentina
                     logHandler.log("RADIATOR_CHECK_SM(): serpentina detectada")
 
                 self.STATE = stateClass.PART_ANALYSIS
@@ -66,7 +66,7 @@ class RADIATOR_CHECK_SM:
                 # Pega o frame atual da UI
                 frame = self.ui.get_current_frame()
 
-                if frame is not None:
+                '''if frame is not None:
                     if self.frame_ind % (5*30) == 0:
                         detection_result = yoloDetector.detectErrInFrame(frame)
                         detections_dict = detection_result.names
@@ -75,7 +75,7 @@ class RADIATOR_CHECK_SM:
                             self.STATE = stateClass.DEFECT_PRCSS
                             return
 
-                    self.frame_ind += 1
+                    self.frame_ind += 1'''
 
                 self.STATE = stateClass.UPDATE_METRICS
                 return
@@ -115,7 +115,7 @@ def main():
 
         sys.exit(app.exec_())
 
-    # yoloDetector.testModel(camera_id=0)
+    #yoloDetector.testModel(camera_id=0)
 
     return
 

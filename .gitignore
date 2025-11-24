@@ -6,5 +6,6 @@ runs/
 src/
 ignore/
 logs/
+__pycache__/
 *.bkp
 *.pt
