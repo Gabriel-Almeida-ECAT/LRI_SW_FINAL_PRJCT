@@ -301,7 +301,14 @@ class yoloDefectDetectorClass():
         cv2.destroyAllWindows()
 
     def detectErrInFrame(self, frame):
-        return self.model(frame)
+        # Redimensiona frame se necessário
+        if frame.shape[1] != self.IMG_SIZE_X or frame.shape[0] != self.IMG_SIZE_Y:
+            frame = cv2.resize(frame, (self.IMG_SIZE_X, self.IMG_SIZE_Y))
+
+        # Executa inferência
+        results = self.model(frame, verbose=False)  # verbose=False para reduzir logs
+
+        return results
 
 
 if __name__ == '__main__':

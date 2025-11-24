@@ -4,7 +4,7 @@ import datetime
 import cv2
 
 from ultralytics import YOLO
-from yolo import yoloDefectDetectorClass
+from yolo_worker import YoloWorkerThread
 from pathlib import Path
 
 from UI import IndustrialUI
@@ -15,7 +15,6 @@ from utils import logHandlerClass
 from enum import Enum
 
 
-yoloDetector = yoloDefectDetectorClass()
 logHandler = logHandlerClass()
 
 
@@ -37,12 +36,22 @@ class RADIATOR_CHECK_SM:
         self.sm_timer.timeout.connect(self.run)
         self.sm_timer.start(100)  # Executa a cada 100ms
 
+        # Inicializa worker thread para YOLO
+        self.yolo_worker = YoloWorkerThread()
+        self.yolo_worker.detection_completed.connect(self.on_detection_completed)
+        self.yolo_worker.detection_error.connect(self.on_detection_error)
+        self.yolo_worker.start()
+
         logHandler.log("RADIATOR_CHECK_SM(): Sistema inicializado")
         self.ui.set_sistema_rodando(True)
         self.frame_ind = 0
 
+        # Controle de detecção
+        self.detection_in_progress = False
+        self.last_detection_result = None
+
+
     def run(self):
-        """Executa um ciclo da state machine"""
         match self.STATE:
             case stateClass.INIT:
                 # Inicialização completa, vai para espera
@@ -66,16 +75,28 @@ class RADIATOR_CHECK_SM:
                 # Pega o frame atual da UI
                 frame = self.ui.get_current_frame()
 
-                '''if frame is not None:
+                if frame is not None:
+                    # Verifica se deve executar detecção (a cada 5 segundos)
                     if self.frame_ind % (5*30) == 0:
-                        detection_result = yoloDetector.detectErrInFrame(frame)
-                        detections_dict = detection_result.names
+                        # Verifica se não há detecção em andamento
+                        if not self.detection_in_progress and not self.yolo_worker.is_busy():
+                            logHandler.log("RADIATOR_CHECK_SM(): Solicitando detecção YOLO assíncrona")
 
-                        if 'ERR' in list(detections_dict.values()):
-                            self.STATE = stateClass.DEFECT_PRCSS
-                            return
+                            # Envia frame para processamento assíncrono
+                            self.yolo_worker.add_frame_to_queue(frame)
+                            self.detection_in_progress = True
+                        else:
+                            logHandler.log("RADIATOR_CHECK_SM(): Detecção anterior ainda em andamento")
 
-                    self.frame_ind += 1'''
+                    self.frame_ind += 1
+
+                # Verifica se há resultado de detecção disponível
+                if self.last_detection_result is not None:
+                    if self.last_detection_result['has_error']:
+                        logHandler.log("RADIATOR_CHECK_SM(): Defeito detectado!")
+                        self.STATE = stateClass.DEFECT_PRCSS
+                        self.last_detection_result = None  # Limpa resultado
+                        return
 
                 self.STATE = stateClass.UPDATE_METRICS
                 return
@@ -97,10 +118,37 @@ class RADIATOR_CHECK_SM:
                 self.STATE = stateClass.WAITING_PART
                 return
 
+    def on_detection_completed(self, has_error, result_data):
+        """Callback quando detecção YOLO é concluída (thread-safe via signal)"""
+        logHandler.log(
+            f"RADIATOR_CHECK_SM(): Detecção concluída - "
+            f"Erro: {has_error}, Detecções: {result_data['num_detections']}"
+        )
+
+        self.detection_in_progress = False
+        self.last_detection_result = result_data
+
+        # Log detalhado das detecções
+        for detection in result_data['detections']:
+            logHandler.log(
+                f"  - Classe: {detection['class']}, "
+                f"Confiança: {detection['confidence']:.2f}"
+            )
+
+    def on_detection_error(self, error_message):
+        """Callback quando ocorre erro na detecção YOLO"""
+        logHandler.log(f"RADIATOR_CHECK_SM(): Erro na detecção: {error_message}")
+        self.detection_in_progress = False
+
     def on_frame_captured(self, frame):
         """Callback quando um novo frame é capturado"""
         # Você pode processar o frame aqui se necessário
         pass
+
+    def cleanup(self):
+        """Limpa recursos ao encerrar"""
+        logHandler.log("RADIATOR_CHECK_SM(): Encerrando worker thread")
+        self.yolo_worker.stop()
 
 
 def main():
@@ -111,6 +159,7 @@ def main():
         state_machine = RADIATOR_CHECK_SM(window)
 
         window.frame_captured.connect(state_machine.on_frame_captured)
+        app.aboutToQuit.connect(state_machine.cleanup)
         window.show()
 
         sys.exit(app.exec_())
