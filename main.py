@@ -2,6 +2,7 @@ import os
 import sys
 import datetime
 import cv2
+import pymcprotocol
 
 from ultralytics import YOLO
 from yolo_worker import YoloWorkerThread
