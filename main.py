@@ -1,22 +1,17 @@
-import os
 import sys
-import datetime
-import cv2
-import pymcprotocol
+import time
 
-from ultralytics import YOLO
 from yolo_worker import YoloWorkerThread
-from pathlib import Path
-
 from UI import IndustrialUI
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
-
+from plc import plcInterfaceClass
 from utils import logHandlerClass
 from enum import Enum
 
 
 logHandler = logHandlerClass()
+plcInterface = plcInterfaceClass()
 
 
 class stateClass(Enum):
@@ -64,12 +59,11 @@ class RADIATOR_CHECK_SM:
 
             case stateClass.WAITING_PART:
                 # Espera sinal do sensor de presença
-                # Quando detectar, desliga esteira e vai para análise
-
-                if False: #sensor serpentina
+                if plcInterface.readMemAddrs("M202"):
                     logHandler.log("RADIATOR_CHECK_SM(): serpentina detectada")
 
-                self.STATE = stateClass.PART_ANALYSIS
+                    self.STATE = stateClass.PART_ANALYSIS
+
                 return
 
             case stateClass.PART_ANALYSIS:
@@ -99,24 +93,30 @@ class RADIATOR_CHECK_SM:
                         self.last_detection_result = None  # Limpa resultado
                         return
 
+                    else:
+                        plcInterface.setMbit("M204", 1)
+                        time.sleep(0.01)
+                        plcInterface.setMbit("M204", 0)
+
                 self.STATE = stateClass.UPDATE_METRICS
                 return
 
             case stateClass.UPDATE_METRICS:
                 # Atualiza métricas na UI
-                # self.ui.increment_serpentinas()
+                self.ui.increment_serpentinas()
 
                 self.STATE = stateClass.WAITING_PART
                 return
 
             case stateClass.DEFECT_PRCSS:
                 # Processa defeito
-                # self.ui.increment_erros()
-                # self.ui.set_erro_presente(True)
+                self.ui.increment_erros()
+                self.ui.set_erro_presente(True)
 
-                logHandler.log("RADIATOR_CHECK_SM(): serpentina detectada")
+                plcInterface.setMbit("M203", 1)
 
-                self.STATE = stateClass.WAITING_PART
+                if plcInterface.readMemAddrs("M203") == 0:
+                    self.STATE = stateClass.WAITING_PART
                 return
 
     def on_detection_completed(self, has_error, result_data):
@@ -153,21 +153,20 @@ class RADIATOR_CHECK_SM:
 
 
 def main():
-    if True:
-        app = QApplication(sys.argv)
-        window = IndustrialUI()
+    app = QApplication(sys.argv)
+    window = IndustrialUI()
 
-        state_machine = RADIATOR_CHECK_SM(window)
+    state_machine = RADIATOR_CHECK_SM(window)
 
-        window.frame_captured.connect(state_machine.on_frame_captured)
-        app.aboutToQuit.connect(state_machine.cleanup)
-        window.show()
+    window.frame_captured.connect(state_machine.on_frame_captured)
+    app.aboutToQuit.connect(state_machine.cleanup)
+    window.show()
 
-        sys.exit(app.exec_())
+    sys.exit(app.exec_())
+
+    del plcInterface
 
     #yoloDetector.testModel(camera_id=0)
-
-    return
 
 
 if __name__ == '__main__':

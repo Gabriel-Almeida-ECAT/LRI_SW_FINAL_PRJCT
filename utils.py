@@ -1,8 +1,6 @@
 import os
 import cv2
-import pymcprotocol
 
-#from ultralytics import YOLO
 from pathlib import Path
 from datetime import datetime
 
@@ -54,7 +52,6 @@ class logHandlerClass():
 
 
 def set_plc_bit(device, value):
-    # Create PLC connection object
     pymc3e = pymcprotocol.Type3E()
 
     try:
@@ -77,7 +74,6 @@ def set_plc_bit(device, value):
         return False
 
     finally:
-        # Close connection
         pymc3e.close()
         print("Connection closed")
 

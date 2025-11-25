@@ -1,5 +1,8 @@
-# install pytorch with cuda:
-pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+M200 - Liga a esteira
+M201 - Desliga a esteira
+M202 - Sensor presenca
+M203 - falha detectada
+M204 - Serpentina ok
 
 ======================================================================================
 # Treino 11-10-2025
