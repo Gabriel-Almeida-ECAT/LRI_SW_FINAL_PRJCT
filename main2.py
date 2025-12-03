@@ -9,7 +9,15 @@ from yolo import yoloDefectDetectorClass  # keep your existing YOLO class
 # PLC Connection Settings
 PLC_IP = "192.168.3.39"  # IP do PLC
 PLC_PORT = 5010          # Porta padrão do MC Protocol (SLMP)
+CAMERA_ID = 1
 
+'''
+M200 - Liga a esteira
+M201 - Desliga a esteira
+M202 - Sensor presenca
+M203 - falha detectada
+M204 - Parte ok
+'''
 
 # --------------------------------------------------------------------
 # Simple logging
@@ -111,6 +119,23 @@ class YoloDetector:
         }
 
 
+def draw_detections(frame, detections):
+    for det in detections:
+        x1, y1, x2, y2 = map(int, det["box"])
+        class_name = det["class"]
+        conf = det["confidence"]
+
+        # Caixa
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        # Texto
+        label = f"{class_name} {conf:.2f}"
+        cv2.putText(frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return frame
+
+
+
 # --------------------------------------------------------------------
 # State machine
 # --------------------------------------------------------------------
@@ -124,7 +149,7 @@ class State(Enum):
 
 class RadiatorCheckSM:
 
-    def __init__(self, plc: PLC, detector: YoloDetector, camera_index: int = 0):
+    def __init__(self, plc: PLC, detector: YoloDetector):
         self.plc = plc
         self.detector = detector
         self.state = State.INIT
@@ -132,10 +157,27 @@ class RadiatorCheckSM:
         self.total_parts = 0
         self.total_errors = 0
 
-        self.cap = cv2.VideoCapture(camera_index)
+        self.cap = cv2.VideoCapture(CAMERA_ID, cv2.CAP_DSHOW)
         if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open camera {camera_index}")
-        log(f"Camera {camera_index} opened")
+            raise RuntimeError(f"Could not open camera {CAMERA_ID}")
+        log(f"Camera {CAMERA_ID} opened")
+
+        self.last_detections = []
+
+    def show_live_frame(self):
+        frame = self._get_frame()
+        if frame is None:
+            return
+
+        # desenhar somente as últimas detecções conhecidas
+        frame_show = draw_detections(frame.copy(), self.last_detections)
+
+        cv2.imshow("Inspeção (Live)", frame_show)
+
+        # tecla para sair
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            log("User requested exit (q)")
+            self.state = None
 
     def _get_frame(self):
         ok, frame = self.cap.read()
@@ -145,6 +187,10 @@ class RadiatorCheckSM:
         return frame
 
     def step(self):
+        self.show_live_frame()
+        if self.state is None:
+            return
+        
         if self.state == State.INIT:
             log("SM: INIT -> system ready, waiting for part")
             self.state = State.WAITING_PART
@@ -164,29 +210,34 @@ class RadiatorCheckSM:
                 return  # stay in same state, try again next step
 
             result = self.detector.detect(frame)
+
+            # salvar boxes para mostrar no vídeo ao vivo
+            self.last_detections = result["detections"]
+
             if result["has_error"]:
                 log("SM: defect detected -> DEFECT_PRCSS")
+
+                # Signal defect to PLC on M203 = 1
+                if not self.plc.write_bit("M203", 1):
+                    # if write failed, stay and try again later
+                    return
+
                 self.state = State.DEFECT_PRCSS
             else:
-                # Part OK: pulse M204 (advance conveyor)
-                if self.plc.write_bit("M204", 1):
-                    time.sleep(0.01)  # short pulse, no strict timing needed
-                    self.plc.write_bit("M204", 0)
+                self.plc.write_bit("M204", 1)
+                    #time.sleep(0.01)  # short pulse, no strict timing needed
                 self.state = State.UPDATE_METRICS
 
         elif self.state == State.UPDATE_METRICS:
+            self.plc.write_bit("M204", 0)
             self.total_parts += 1
             log(f"SM: part OK, total_parts={self.total_parts} -> WAITING_PART")
+            self.last_detections = []
             self.state = State.WAITING_PART
 
         elif self.state == State.DEFECT_PRCSS:
             self.total_errors += 1
             log(f"SM: processing defect, total_errors={self.total_errors}")
-
-            # Signal defect to PLC on M203 = 1
-            if not self.plc.write_bit("M203", 1):
-                # if write failed, stay and try again later
-                return
 
             # Wait until PLC clears M203 back to 0
             while True:
@@ -200,6 +251,7 @@ class RadiatorCheckSM:
                     break
                 time.sleep(0.1)
 
+            self.last_detections = []
             self.state = State.WAITING_PART
 
     def cleanup(self):
@@ -209,6 +261,7 @@ class RadiatorCheckSM:
         except Exception:
             pass
         self.plc.close()
+        cv2.destroyAllWindows()
 
 
 # --------------------------------------------------------------------
@@ -217,12 +270,12 @@ class RadiatorCheckSM:
 def main():
     plc = PLC()
     detector = YoloDetector()
-    sm = RadiatorCheckSM(plc, detector, camera_index=0)
+    sm = RadiatorCheckSM(plc, detector)
 
     try:
         while True:
             sm.step()
-            time.sleep(0.1)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         log("Stopping by user request")
     finally:
